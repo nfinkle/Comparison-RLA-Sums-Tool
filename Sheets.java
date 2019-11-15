@@ -11,7 +11,6 @@ import com.itextpdf.layout.borders.DoubleBorder;
 import com.itextpdf.layout.property.VerticalAlignment;
 
 import com.itextpdf.layout.Document;
-import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.kernel.pdf.PdfDocument;
 import java.io.FileNotFoundException;
 
@@ -38,7 +37,8 @@ public class Sheets {
     // all votes, each line corresponding to a single voter, with the first
     // cols - fc corresponding to info about each ballot from the CVR
     final String[][] vote_matrix;
-    final int num_pages; // number of pages
+    final HashMap<Integer, Integer> contest_cols; // how many columns is each contests
+    final VoteCount[][] vote_counts; // vote_counts
 
     public Sheets(String title, String[] column_titles, String[] candidates, String[] parties, String[][] vote_matrix) {
         this.title = title;
@@ -50,8 +50,9 @@ public class Sheets {
         this.imprintedID_i = getIndexOfImprintedID(column_titles);
         this.is_new_contest = getContestStarts();
         this.votes_allowed = parseVotesPerContest(is_new_contest);
+        this.contest_cols = getContestColumns();
         this.vote_matrix = vote_matrix;
-        this.num_pages = (vote_matrix.length + BALLOTS_PER_PAGE - 1) / BALLOTS_PER_PAGE; // Round up
+        this.vote_counts = markVoteCounts();
     }
 
     /*
@@ -71,6 +72,19 @@ public class Sheets {
             starts[i] = !column_titles[i - 1].equals(column_titles[i]);
         }
         return starts;
+    }
+
+    private HashMap<Integer, Integer> getContestColumns() {
+        HashMap<Integer, Integer> contest_cols = new HashMap<Integer, Integer>();
+        int prev = fc;
+        for (int i = this.fc + 1; i < this.cols; i++) {
+            if (is_new_contest[i]) {
+                contest_cols.put(prev, i - prev);
+                prev = i;
+            }
+        }
+        contest_cols.put(prev, this.cols - prev);
+        return contest_cols;
     }
 
     private static int getIndexOfImprintedID(String[] column_titles) {
@@ -102,26 +116,6 @@ public class Sheets {
         return votesAllowed;
     }
 
-    private int[] buildRunningSums(int[] prev_running_sums, int[] partial_sums) {
-        int[] new_running_sums = new int[partial_sums.length];
-        for (int i = 0; i < partial_sums.length; i++) {
-            new_running_sums[i] = prev_running_sums[i] + partial_sums[i];
-        }
-        return new_running_sums;
-    }
-
-    private int[] buildPartialSums(int start_line) {
-        int[] partial_sums = new int[cols - fc];
-        for (int i = start_line; i < BALLOTS_PER_PAGE + start_line && i < vote_matrix.length; i++) {
-            for (int j = fc; j < cols; j++) {
-                if (vote_matrix[i][j] == null || vote_matrix[i][j].equals(""))
-                    continue;
-                partial_sums[j - fc] += Integer.parseInt(vote_matrix[i][j]);
-            }
-        }
-        return partial_sums;
-    }
-
     private VoteCount getVoteCount(int votes_expected, int votes) {
         if (votes < votes_expected) {
             return VoteCount.UNDER_VOTE;
@@ -131,9 +125,9 @@ public class Sheets {
         return VoteCount.OVER_VOTE;
     }
 
-    private VoteCount[][] markVoteCounts(int start_index) {
-        VoteCount[][] vote_counts = new VoteCount[BALLOTS_PER_PAGE][cols];
-        for (int i = start_index; i < start_index + BALLOTS_PER_PAGE && i < vote_matrix.length; i++) {
+    private VoteCount[][] markVoteCounts() {
+        VoteCount[][] vote_counts = new VoteCount[this.vote_matrix.length][this.cols];
+        for (int i = 0; i < this.vote_matrix.length; i++) {
             int count = 0;
             int prev_new_contest_i = fc;
             for (int j = fc; j < cols; j++) {
@@ -141,7 +135,7 @@ public class Sheets {
                     int votes_expected = votes_allowed.get(prev_new_contest_i);
                     VoteCount vc = getVoteCount(votes_expected, count);
                     for (int k = prev_new_contest_i; k < j; k++)
-                        vote_counts[i - start_index][k] = vc;
+                        vote_counts[i][k] = vc;
                     count = 0;
                     prev_new_contest_i = j;
                 }
@@ -152,24 +146,28 @@ public class Sheets {
             int votes_expected = votes_allowed.get(prev_new_contest_i);
             VoteCount vc = getVoteCount(votes_expected, count);
             for (int k = prev_new_contest_i; k < cols; k++) {
-                vote_counts[i - start_index][k] = vc;
+                vote_counts[i][k] = vc;
             }
         }
         return vote_counts;
     }
 
-    private Page[] intermediateSheets() {
-        Page[] pages = new Page[num_pages];
-        for (int i = 0, CVR_start_i = 0; i < pages.length; i++, CVR_start_i += BALLOTS_PER_PAGE) {
-            VoteCount[][] vote_counts = markVoteCounts(CVR_start_i);
-            int[] partial_sums = buildPartialSums(CVR_start_i);
-            int[] running_sums = partial_sums;
-            if (i != 0) {
-                running_sums = buildRunningSums(pages[i - 1].getRunningSums(), partial_sums);
-            }
-            pages[i] = new Page(this, i + 1, CVR_start_i, vote_counts, partial_sums, running_sums);
+    private ContestSheets[] intermediateSheets() {
+        int contests = 0;
+        for (int i = 0; i < is_new_contest.length; i++) {
+            if (is_new_contest[i])
+                contests++;
         }
-        return pages;
+        ContestSheets[] contest_sheets = new ContestSheets[contests];
+        System.err.println(contest_cols);
+        for (int i = fc, col = 0; i < cols; i++) {
+            if (is_new_contest[i]) {
+                int cols = contest_cols.get(i);
+                String c_title = title + " - " + column_titles[i];
+                contest_sheets[col++] = new ContestSheets(this, c_title, i, cols);
+            }
+        }
+        return contest_sheets;
     }
 
     private static String[] prepareColumnTitles(String[] contests, String[] column_titles_line) {
@@ -201,23 +199,6 @@ public class Sheets {
         return out.toArray(new String[out.size()]);
     }
 
-    public void writePDF(Page[] pages) throws FileNotFoundException {
-        PdfWriter writer = new PdfWriter(title + ".pdf");
-        PdfDocument pdfdoc = new PdfDocument(writer);
-        Document doc = new Document(pdfdoc);
-        doc.setMargins(0, 0, 0, 0);
-        for (int i = 0; i < pages.length; i++) {
-            pdfdoc.addNewPage();
-            pages[i].formatPDFPage(pdfdoc, doc);
-        }
-        // for (Page p : pages) {
-        // pdfdoc.addNewPage();
-        // p.formatPDFPage(pdfdoc, doc);
-        // }
-        doc.close();
-        pdfdoc.close();
-    }
-
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         String title_line = sc.nextLine();
@@ -236,9 +217,11 @@ public class Sheets {
             vote_matrix[i] = splitAtComma(ballot_lines.get(i)); // .split(",");
         }
         Sheets s = new Sheets(title, column_titles, candidates, parties, vote_matrix);
-        try {
-            s.writePDF(s.intermediateSheets());
-        } catch (Exception e) {
+        for (ContestSheets cs : s.intermediateSheets()) {
+            try {
+                cs.printContestSheet();
+            } catch (Exception e) {
+            }
         }
         sc.close();
     }

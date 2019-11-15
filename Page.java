@@ -1,4 +1,3 @@
-
 import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.geom.PageSize;
 import com.itextpdf.kernel.pdf.PdfDocument;
@@ -13,54 +12,26 @@ import com.itextpdf.layout.property.TextAlignment;
 
 import java.awt.FontMetrics;
 
+import java.util.HashMap;
+
 class Page {
     // ID of the page (which number)
     private final int pageID;
     // index to start at CVR_lines
     private final int votes_line_start_i;
-    // stores whether each vote was an overvote, an undervote, or a legal vote
-    private final VoteCount[][] vote_counts;
-    // sums of the votes on each page
-    private final int[] partial_sums;
-    // running_sums[i] is the sum of all partial_sums[i] for Pages with smaller IDs
-    private final int[] running_sums;
+    private final int num_lines_on_page;
+    private int[] partial_sums;
+    private int[] running_sums;
+    private final ContestSheets cs; // contest sheet
 
-    /* Now information passed from Sheets */
-    private final int BALLOTS_PER_PAGE;
-    private final String title; // Title of CVR
-    private final String[] column_titles; // titles of the columns
-    // the first row is the candidates and second is their parties
-    private final String[] candidates;
-    final String[] parties;
-    private final int cols; // number of total columns
-    private final int fc; // index of first contest in column_titles
-    private final int imprintedID_i; // index of "ImprintedID column"
-    // true at ith index if ith column begins a new contest
-    private final boolean[] is_new_contest;
-    // all votes, each line corresponding to a single voter, with the first
-    // cols - fc corresponding to info about each ballot from the CVR
-    private final String[][] vote_matrix;
-    private final int num_lines_on_page; // number of lines in table on the page
-
-    public Page(Sheets sheets, int pageID, int votes_line_start_i, VoteCount[][] vote_counts, int[] partial_sums,
-            int[] running_sums) {
+    public Page(ContestSheets cs, int pageID, int votes_line_start_i, int[] partial_sums, int[] running_sums) {
         this.pageID = pageID;
         this.votes_line_start_i = votes_line_start_i;
-        this.vote_counts = vote_counts;
+        this.cs = cs;
         this.partial_sums = partial_sums;
         this.running_sums = running_sums;
-        this.BALLOTS_PER_PAGE = sheets.BALLOTS_PER_PAGE;
-        this.title = sheets.title;
-        this.column_titles = sheets.column_titles;
-        this.candidates = sheets.candidates;
-        this.parties = sheets.parties;
-        this.cols = sheets.cols;
-        this.fc = sheets.fc;
-        this.imprintedID_i = sheets.imprintedID_i;
-        this.is_new_contest = sheets.is_new_contest;
-        this.vote_matrix = sheets.vote_matrix;
-        int lines = vote_matrix.length - votes_line_start_i;
-        this.num_lines_on_page = lines > BALLOTS_PER_PAGE ? BALLOTS_PER_PAGE : lines;
+        int lines = cs.ballots - votes_line_start_i;
+        this.num_lines_on_page = lines > cs.BALLOTS_PER_PAGE() ? cs.BALLOTS_PER_PAGE() : lines;
     }
 
     public int[] getRunningSums() {
@@ -95,13 +66,13 @@ class Page {
 
     private void addTitle(Document doc, float fontSize, PageSize ps) {
         Table table = new Table(1);
-        int len = this.title.length();
+        int len = cs.title.length();
         table.setWidth(len);
         float middle_with_offset = ps.getWidth() / 2 - (fontSize * len / 2);
         float top_row = ps.getHeight() - 2 * fontSize;
         table.setFixedPosition(pageID, middle_with_offset, top_row, len * fontSize);
         table.setTextAlignment(TextAlignment.CENTER);
-        Paragraph p = new Paragraph(this.title);
+        Paragraph p = new Paragraph(cs.title);
         p.setFontSize(fontSize);
         Cell cell = new Cell();
         cell.setBorder(Border.NO_BORDER);
@@ -111,66 +82,50 @@ class Page {
     }
 
     public float addTitlesToTable(Table table, float bottomBorderThickness) {
-        float width = addColumnTitlesRow(table);
+        float width = addPartiesRow(table);
         table.startNewRow();
-        addPartiesRow(table);
-        table.startNewRow();
-        addCandidateNamesRow(table, bottomBorderThickness);
+        width = Math.max(width, addCandidateNamesRow(table, bottomBorderThickness));
         return width;
     }
 
-    private float addColumnTitlesRow(Table table) {
+    private float addPartiesRow(Table table) {
         float width = 0;
-        Cell imprintedID = new Cell();
-        imprintedID.add(new Paragraph("imprintedID"));
-        table.addCell(imprintedID);
-        int cells_in_contest = 0;
-        for (int i = column_titles.length - 1; i >= this.fc; i--) {
-            if (this.is_new_contest[i]) {
-                width += column_titles[i].length();
-                Cell c = new Cell(1, cells_in_contest + 1);
-                table.addCell(c.add(new Paragraph(this.column_titles[i])));
-                cells_in_contest = 0;
-            } else {
-                cells_in_contest++;
-            }
-        }
-        return width;
-    }
-
-    private void addPartiesRow(Table table) {
         table.addCell(new Cell()); // skip the imprintedID cell
-        for (int i = this.fc; i < parties.length; i++) {
-            Cell c = new Cell().add(new Paragraph(this.parties[i]));
+        for (int i = 0; i < cs.cols; i++) {
+            String party = cs.party(i);
+            width += party.length();
+            Cell c = new Cell().add(new Paragraph(party));
             table.addCell(c);
         }
+        return width;
     }
 
-    private void addCandidateNamesRow(Table table, float bottomBorderThickness) {
+    private float addCandidateNamesRow(Table table, float bottomBorderThickness) {
+        float width = 0;
         Cell c = new Cell(); // skip the imprintedID cell
         c.setBorderBottom(new SolidBorder(bottomBorderThickness));
         table.addCell(c);
-        for (int i = this.fc; i < candidates.length; i++) {
-            c = new Cell().add(new Paragraph(this.candidates[i]));
+        for (int i = 0; i < cs.cols; i++) {
+            String candidate = cs.candidate(i);
+            width += candidate.length();
+            c = new Cell().add(new Paragraph(candidate));
             c.setBorderBottom(new SolidBorder(bottomBorderThickness));
             table.addCell(c);
         }
+        return width;
     }
 
     private void addVotesToTable(Table table) {
-        for (int i = votes_line_start_i; i < votes_line_start_i + this.BALLOTS_PER_PAGE
-                && i < this.vote_matrix.length; i++) {
+        for (int i = votes_line_start_i; i < votes_line_start_i + this.cs.BALLOTS_PER_PAGE()
+                && i < this.cs.ballots; i++) {
             table.startNewRow();
-            table.addCell(new Cell().add(new Paragraph(this.vote_matrix[i][this.imprintedID_i])));
-            for (int j = this.fc; j < this.cols; j++) {
-                int vote = 0;
-                if (this.vote_matrix[i][j] != null && !this.vote_matrix[i][j].equals("")) {
-                    vote = Integer.parseInt(this.vote_matrix[i][j]);
-                }
-                Cell c = new Cell().add(new Paragraph(Integer.toString(vote)));
-                if (vote_counts[i - votes_line_start_i][j] == VoteCount.UNDER_VOTE) {
+            table.addCell(new Cell().add(new Paragraph(cs.getImprintedID(i))));
+            VoteCount vc = cs.getVoteCount(i);
+            for (int j = 0; j < this.cs.cols; j++) {
+                Cell c = new Cell().add(new Paragraph(cs.getVote(j, i)));
+                if (vc == VoteCount.UNDER_VOTE) {
                     c.setBackgroundColor(ColorConstants.LIGHT_GRAY);
-                } else if (vote_counts[i - votes_line_start_i][j] == VoteCount.OVER_VOTE) {
+                } else if (vc == VoteCount.OVER_VOTE) {
                     c.setBackgroundColor(ColorConstants.RED);
                 }
                 table.addCell(c);
@@ -198,14 +153,14 @@ class Page {
     }
 
     public float addVotesTable(Document doc, PageSize ps, float fontSize) {
-        Table table = new Table(this.vote_matrix.length + 1);
-        float width = addTitlesToTable(table, 2) * (fontSize - 2);
+        Table table = new Table(cs.cols);
+        float width = addTitlesToTable(table, 2);
         addVotesToTable(table);
         table.setFontSize(fontSize);
         table.startNewRow();
         addSumsToTable(table, 2);
         table.setHorizontalAlignment(HorizontalAlignment.CENTER);
-        table.setFixedPosition(pageID, ps.getWidth() / 2 - width / 2, BALLOTS_PER_PAGE, width);
+        table.setFixedPosition(pageID, ps.getWidth() / 2 - width / 2, cs.BALLOTS_PER_PAGE(), cs.title.length());
         table.setTextAlignment(TextAlignment.CENTER);
         doc.add(table);
         return width;
