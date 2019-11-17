@@ -6,13 +6,7 @@ import java.util.HashMap;
 import java.util.Arrays;
 import java.util.ArrayList;
 
-import com.itextpdf.kernel.colors.Color;
-import com.itextpdf.layout.borders.DoubleBorder;
-import com.itextpdf.layout.property.VerticalAlignment;
-
-import com.itextpdf.layout.Document;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import java.io.FileNotFoundException;
+import java.io.File;
 
 enum VoteCount {
     UNDER_VOTE, LEGAL_VOTE, OVER_VOTE;
@@ -45,7 +39,7 @@ public class Sheets {
         this.column_titles = column_titles;
         this.cols = column_titles.length;
         this.candidates = candidates;
-        this.parties = parties;
+        this.parties = extendParties(parties, candidates);
         this.fc = getIndexOfFirstContest(column_titles);
         this.imprintedID_i = getIndexOfImprintedID(column_titles);
         this.is_new_contest = getContestStarts();
@@ -62,7 +56,7 @@ public class Sheets {
      * An important invariant is that "BallotType" is always the column preceeding
      * the first contest.
      */
-    public boolean[] getContestStarts() {
+    private boolean[] getContestStarts() {
         boolean[] starts = new boolean[cols];
         int i;
         for (i = 0; i < fc; i++) {
@@ -72,6 +66,19 @@ public class Sheets {
             starts[i] = !column_titles[i - 1].equals(column_titles[i]);
         }
         return starts;
+    }
+
+    private static String[] extendParties(String[] parties, String[] candidates) {
+        if (parties.length >= candidates.length)
+            return parties;
+        String[] new_parties = new String[candidates.length];
+        for (int i = 0; i < parties.length; i++) {
+            new_parties[i] = parties[i];
+        }
+        for (int i = parties.length; i < candidates.length; i++) {
+            new_parties[i] = "";
+        }
+        return new_parties;
     }
 
     private HashMap<Integer, Integer> getContestColumns() {
@@ -159,7 +166,6 @@ public class Sheets {
                 contests++;
         }
         ContestSheets[] contest_sheets = new ContestSheets[contests];
-        System.err.println(contest_cols);
         for (int i = fc, col = 0; i < cols; i++) {
             if (is_new_contest[i]) {
                 int cols = contest_cols.get(i);
@@ -188,8 +194,9 @@ public class Sheets {
         int end = s.indexOf(",");
         while (end < s.length() && end != -1) {
             if (start == end)
-                out.add("0");
-            out.add(s.substring(start, end));
+                out.add("");
+            else
+                out.add(s.substring(start, end));
             start = end + 1;
             end = s.indexOf(",", start);
         }
@@ -217,10 +224,16 @@ public class Sheets {
             vote_matrix[i] = splitAtComma(ballot_lines.get(i)); // .split(",");
         }
         Sheets s = new Sheets(title, column_titles, candidates, parties, vote_matrix);
+        File f = new File(title);
+        f.mkdir();
         for (ContestSheets cs : s.intermediateSheets()) {
             try {
                 cs.printContestSheet();
             } catch (Exception e) {
+                System.err.println(cs.header + ": ");
+                e.printStackTrace();
+                System.err.println();
+
             }
         }
         sc.close();

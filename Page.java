@@ -8,11 +8,8 @@ import com.itextpdf.layout.element.Cell;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.property.HorizontalAlignment;
+import com.itextpdf.layout.property.VerticalAlignment;
 import com.itextpdf.layout.property.TextAlignment;
-
-import java.awt.FontMetrics;
-
-import java.util.HashMap;
 
 class Page {
     // ID of the page (which number)
@@ -20,8 +17,8 @@ class Page {
     // index to start at CVR_lines
     private final int votes_line_start_i;
     private final int num_lines_on_page;
-    private int[] partial_sums;
-    private int[] running_sums;
+    private final int[] partial_sums;
+    private final int[] running_sums;
     private final ContestSheets cs; // contest sheet
 
     public Page(ContestSheets cs, int pageID, int votes_line_start_i, int[] partial_sums, int[] running_sums) {
@@ -66,24 +63,38 @@ class Page {
 
     private void addTitle(Document doc, float fontSize, PageSize ps) {
         Table table = new Table(1);
-        int len = cs.title.length();
+        // table.setWidthPercentage();
+        int len = cs.header.length();
         table.setWidth(len);
-        float middle_with_offset = ps.getWidth() / 2 - (fontSize * len / 2);
         float top_row = ps.getHeight() - 2 * fontSize;
-        table.setFixedPosition(pageID, middle_with_offset, top_row, len * fontSize);
         table.setTextAlignment(TextAlignment.CENTER);
-        Paragraph p = new Paragraph(cs.title);
-        p.setFontSize(fontSize);
+        Paragraph p = new Paragraph(cs.header);
         Cell cell = new Cell();
         cell.setBorder(Border.NO_BORDER);
         cell.add(p);
+        while (len * fontSize >= ps.getWidth() * 2) {
+            fontSize--;
+        }
+        table.setFontSize(fontSize);
+        float middle_with_offset = ps.getWidth() / 2 - (fontSize * len / 2);
+        table.setFixedPosition(pageID, middle_with_offset, top_row, len * fontSize);
         table.addCell(cell);
         doc.add(table);
     }
 
     public float addTitlesToTable(Table table, float bottomBorderThickness) {
-        float width = addPartiesRow(table);
-        table.startNewRow();
+        float width = 0;
+        boolean has_parties = false;
+        for (int i = 0; i < cs.cols; i++) {
+            if (!cs.party(i).equals("")) {
+                has_parties = true;
+                break;
+            }
+        }
+        if (has_parties) {
+            width = addPartiesRow(table);
+            table.startNewRow();
+        }
         width = Math.max(width, addCandidateNamesRow(table, bottomBorderThickness));
         return width;
     }
@@ -102,13 +113,14 @@ class Page {
 
     private float addCandidateNamesRow(Table table, float bottomBorderThickness) {
         float width = 0;
-        Cell c = new Cell(); // skip the imprintedID cell
+        Cell c = new Cell().add(new Paragraph("imprintedID")); // skip the imprintedID cell
         c.setBorderBottom(new SolidBorder(bottomBorderThickness));
         table.addCell(c);
         for (int i = 0; i < cs.cols; i++) {
             String candidate = cs.candidate(i);
             width += candidate.length();
             c = new Cell().add(new Paragraph(candidate));
+            // c.setMinWidth(10);
             c.setBorderBottom(new SolidBorder(bottomBorderThickness));
             table.addCell(c);
         }
@@ -122,8 +134,13 @@ class Page {
             table.addCell(new Cell().add(new Paragraph(cs.getImprintedID(i))));
             VoteCount vc = cs.getVoteCount(i);
             for (int j = 0; j < this.cs.cols; j++) {
-                Cell c = new Cell().add(new Paragraph(cs.getVote(j, i)));
+                String vote = cs.getVote(j, i);
+                Cell c = new Cell().add(new Paragraph(vote));
                 if (vc == VoteCount.UNDER_VOTE) {
+                    // if (vote.equals("0")) {
+                    // System.err.println(cs.sheets.vote_matrix[i][cs.csi + j]);
+                    // throw new IllegalArgumentException("i = " + i + ", j = " + j);
+                    // }
                     c.setBackgroundColor(ColorConstants.LIGHT_GRAY);
                 } else if (vc == VoteCount.OVER_VOTE) {
                     c.setBackgroundColor(ColorConstants.RED);
@@ -153,14 +170,19 @@ class Page {
     }
 
     public float addVotesTable(Document doc, PageSize ps, float fontSize) {
-        Table table = new Table(cs.cols);
+        Table table = new Table(cs.cols + 1);
         float width = addTitlesToTable(table, 2);
         addVotesToTable(table);
         table.setFontSize(fontSize);
         table.startNewRow();
         addSumsToTable(table, 2);
+        // table.setFixedPosition(pageID, ps.getWidth() / 2 - width / 2,
+        // cs.BALLOTS_PER_PAGE(), 1000);
+        table.setVerticalAlignment(VerticalAlignment.MIDDLE);
         table.setHorizontalAlignment(HorizontalAlignment.CENTER);
-        table.setFixedPosition(pageID, ps.getWidth() / 2 - width / 2, cs.BALLOTS_PER_PAGE(), cs.title.length());
+        table.setAutoLayout();
+        table.setRelativePosition(0, 50, 0, 0);
+        // table.setFixedPosition(pageID, 50, 50, width + "imprintedID".length());
         table.setTextAlignment(TextAlignment.CENTER);
         doc.add(table);
         return width;
