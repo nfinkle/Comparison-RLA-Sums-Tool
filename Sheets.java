@@ -4,6 +4,7 @@
 import java.util.Scanner;
 import java.util.HashMap;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.ArrayList;
 
 import java.io.File;
@@ -13,26 +14,25 @@ enum VoteCount {
 }
 
 public class Sheets {
-    final int BALLOTS_PER_PAGE = 50;
-    final int CONTESTS_PER_PAGE = 3;
-    final String title; // Title of CVR
-    final String[] column_titles; // titles of the columns
+    private final int BALLOTS_PER_PAGE = 50;
+    private final String title; // Title of CVR
+    private final String[] column_titles; // titles of the columns
     // the first row is the candidates and second is their parties
-    final String[] candidates;
-    final String[] parties;
-    final int cols; // number of total columns
-    final int fc; // index of first contest in column_titles
-    final int imprintedID_i; // index of "ImprintedID column"
+    private final String[] candidates;
+    private final String[] parties;
+    private final int cols; // number of total columns
+    private final int fc; // index of first contest in column_titles
+    private final int imprintedID_i; // index of "ImprintedID column"
     // true at ith index if ith column begins a new contest
-    final boolean[] is_new_contest;
+    private final boolean[] is_new_contest;
     // votes allowed for each contest, with key = index of column_titles
     // of the first column in the contest, val = votes allowed in the contest
     private final HashMap<Integer, Integer> votes_allowed;
     // all votes, each line corresponding to a single voter, with the first
     // cols - fc corresponding to info about each ballot from the CVR
-    final String[][] vote_matrix;
-    final HashMap<Integer, Integer> contest_cols; // how many columns is each contests
-    final VoteCount[][] vote_counts; // vote_counts
+    private final String[][] vote_matrix;
+    private final HashMap<Integer, Integer> contest_cols; // how many columns is each contests
+    private final VoteCount[][] vote_counts; // vote_counts
 
     public Sheets(String title, String[] column_titles, String[] candidates, String[] parties, String[][] vote_matrix) {
         this.title = title;
@@ -46,7 +46,71 @@ public class Sheets {
         this.votes_allowed = parseVotesPerContest(is_new_contest);
         this.contest_cols = getContestColumns();
         this.vote_matrix = vote_matrix;
+        Arrays.sort(this.vote_matrix, new ImprintedIDComparator());
         this.vote_counts = markVoteCounts();
+    }
+
+    private class ImprintedIDComparator implements Comparator<String[]> {
+        public int compare(String[] first, String[] second) {
+            String[] f = first[imprintedID_i].split("-");
+            String[] s = second[imprintedID_i].split("-");
+            for (int i = 0; i < f.length && i < s.length; i++) {
+                if (!s[i].equals(f[i])) {
+                    try {
+                        int i_f = Integer.parseInt(f[i]);
+                        int i_s = Integer.parseInt(s[i]);
+                        return i_f - i_s;
+                    } catch (NumberFormatException e) {
+                        return s[i].compareTo(f[i]);
+                    }
+                }
+            }
+            return f.length - s.length;
+        }
+    }
+
+    // get the ith candidate of the CVR
+    public String getCandidate(int i) {
+        if (i < fc || i >= cols)
+            throw new IllegalArgumentException("column out of bounds");
+        return candidates[i];
+    }
+
+    // get the party of the ith candidate
+    public String getParty(int i) {
+        if (i < fc || i >= cols)
+            throw new IllegalArgumentException("column out of bounds");
+        return parties[i];
+    }
+
+    public int BALLOTS_PER_PAGE() {
+        return BALLOTS_PER_PAGE;
+    }
+
+    public String title() {
+        return title;
+    }
+
+    public int ballots() {
+        return vote_matrix.length;
+    }
+
+    // return the imprintedID of the ith ballot
+    public String getImprintedID(int i) {
+        return vote_matrix[i][imprintedID_i];
+    }
+
+    // get the VoteCount for the ith ballot
+    public VoteCount getVoteCount(int row, int col) {
+        return vote_counts[row][col];
+    }
+
+    public String getVote(int row, int col) {
+        if (row < 0 || row >= ballots())
+            throw new IllegalArgumentException("row out of bounds");
+        if (col < 0 || col >= cols)
+            throw new IllegalArgumentException("col out of bounds");
+        return vote_matrix[row][col];
     }
 
     /*
@@ -123,7 +187,7 @@ public class Sheets {
         return votesAllowed;
     }
 
-    private VoteCount getVoteCount(int votes_expected, int votes) {
+    private VoteCount calcVoteCount(int votes_expected, int votes) {
         if (votes < votes_expected) {
             return VoteCount.UNDER_VOTE;
         } else if (votes == votes_expected) {
@@ -140,7 +204,7 @@ public class Sheets {
             for (int j = fc; j < cols; j++) {
                 if (is_new_contest[j]) {
                     int votes_expected = votes_allowed.get(prev_new_contest_i);
-                    VoteCount vc = getVoteCount(votes_expected, count);
+                    VoteCount vc = calcVoteCount(votes_expected, count);
                     for (int k = prev_new_contest_i; k < j; k++)
                         vote_counts[i][k] = vc;
                     count = 0;
@@ -151,7 +215,7 @@ public class Sheets {
                 count += Integer.parseInt(vote_matrix[i][j]);
             }
             int votes_expected = votes_allowed.get(prev_new_contest_i);
-            VoteCount vc = getVoteCount(votes_expected, count);
+            VoteCount vc = calcVoteCount(votes_expected, count);
             for (int k = prev_new_contest_i; k < cols; k++) {
                 vote_counts[i][k] = vc;
             }
@@ -170,7 +234,7 @@ public class Sheets {
             if (is_new_contest[i]) {
                 int cols = contest_cols.get(i);
                 String c_title = title + " - " + column_titles[i];
-                contest_sheets[col++] = new ContestSheets(this, c_title, i, cols);
+                contest_sheets[col++] = new ContestSheets(this, c_title, column_titles[i], i, cols);
             }
         }
         return contest_sheets;
@@ -230,7 +294,7 @@ public class Sheets {
             try {
                 cs.printContestSheet();
             } catch (Exception e) {
-                System.err.println(cs.header + ": ");
+                System.err.println(cs.header() + ": ");
                 e.printStackTrace();
                 System.err.println();
 
