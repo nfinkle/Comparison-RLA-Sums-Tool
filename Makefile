@@ -1,6 +1,6 @@
 all: compile
 run: compile
-	java Sheets < DenverCVREdited.csv
+	java VotingSheets < DenverCVREdited.csv
 
 clean:
 	rm *.class
