@@ -78,8 +78,7 @@ class Page {
         doc.add(table);
     }
 
-    public float addTitlesToTable(Table table, float bottomBorderThickness) {
-        float width = 0;
+    public void addTitlesToTable(Table table, float bottomBorderThickness) {
         boolean has_parties = false;
         for (int i = 0; i < cs.cols(); i++) {
             if (!cs.party(i).equals("")) {
@@ -88,39 +87,33 @@ class Page {
             }
         }
         if (has_parties) {
-            width = addPartiesRow(table);
+            addPartiesRow(table);
             table.startNewRow();
         }
-        width = Math.max(width, addCandidateNamesRow(table, bottomBorderThickness));
-        return width;
+        addCandidateNamesRow(table, bottomBorderThickness);
     }
 
-    private float addPartiesRow(Table table) {
-        float width = 0;
+    private void addPartiesRow(Table table) {
         table.addCell(new Cell()); // skip the imprintedID cell
         for (int i = 0; i < cs.cols(); i++) {
-            String party = cs.party(i);
-            width += party.length();
-            Cell c = new Cell().add(new Paragraph(party));
+            Cell c = new Cell().add(new Paragraph(cs.party(i)));
             table.addCell(c);
         }
-        return width;
     }
 
-    private float addCandidateNamesRow(Table table, float bottomBorderThickness) {
-        float width = 0;
-        Cell c = new Cell().add(new Paragraph("imprintedID")); // skip the imprintedID cell
+    private void addCandidateNamesRow(Table table, float bottomBorderThickness) {
+        Cell c = new Cell().add(new Paragraph("Ballot ID")); // skip the imprintedID cell
         c.setBorderBottom(new SolidBorder(bottomBorderThickness));
+        c.setTextAlignment(TextAlignment.CENTER);
         table.addCell(c);
         for (int i = 0; i < cs.cols(); i++) {
             String candidate = cs.candidate(i);
-            width += candidate.length();
+            candidate = candidate.replaceAll(" ", "\n");
+            candidate = candidate.replaceAll("\n/\n", " /\n");
             c = new Cell().add(new Paragraph(candidate));
-            // c.setMinWidth(10);
             c.setBorderBottom(new SolidBorder(bottomBorderThickness));
             table.addCell(c);
         }
-        return width;
     }
 
     private void addVotesToTable(Table table) {
@@ -168,9 +161,9 @@ class Page {
         }
     }
 
-    public float addVotesTable(Document doc, PageSize ps, float fontSize) {
+    public void addVotesTable(Document doc, PageSize ps, float fontSize) {
         Table table = new Table(cs.cols() + 1);
-        float width = addTitlesToTable(table, 2);
+        addTitlesToTable(table, 2);
         addVotesToTable(table);
         table.setFontSize(fontSize);
         table.startNewRow();
@@ -181,7 +174,6 @@ class Page {
         table.setRelativePosition(0, 50, 0, 0);
         table.setTextAlignment(TextAlignment.CENTER);
         doc.add(table);
-        return width;
     }
 
     public void formatPDFPage(PdfDocument pdfdoc, Document doc) {
