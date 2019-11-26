@@ -90,8 +90,19 @@ public class Page {
         doc.add(table);
     }
 
+    private void addColumnTitlesRow(Table table) {
+        table.addHeaderCell(new Cell());
+        table.addHeaderCell(new Cell());
+        for (int c = 0; c < cs.length; c++) {
+            Cell cell = new Cell(1, cs[c].cols());
+            table.addHeaderCell(cell.add(new Paragraph(cs[c].contest_name())));
+        }
+    }
+
     public void addTitlesToTable(Table table) {
         Border border = new SolidBorder(2);
+        addColumnTitlesRow(table);
+        table.startNewRow();
         addParties(table);
         table.startNewRow();
         Cell ballotsCell = new Cell();
