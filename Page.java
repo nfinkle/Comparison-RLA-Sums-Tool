@@ -13,6 +13,8 @@ import com.itextpdf.layout.property.TextAlignment;
 
 import java.util.ArrayList;
 
+import javax.naming.NameAlreadyBoundException;
+
 public class Page {
     // ID of the page (which number)
     private final int pageID;
@@ -23,14 +25,13 @@ public class Page {
     private final ArrayList<ArrayList<Integer>> partial_sums;
     private final ArrayList<ArrayList<Integer>> prev_running_sums;
     private final Contest[] cs; // contest sheet
+    private final int num_pages; // number of pages
 
     public Page(Contest[] cs, int pageID, int votes_line_start_i, ArrayList<ArrayList<Integer>> partial_sums,
-            ArrayList<ArrayList<Integer>> prev_running_sums) {
+            ArrayList<ArrayList<Integer>> prev_running_sums, int num_pages) {
         this.pageID = pageID;
         this.votes_line_start_i = votes_line_start_i;
         this.cs = cs;
-        // this.partial_sums = partial_sums;
-        // this.prev_running_sums = prev_running_sums;
         int cols = 2;
         for (Contest c : cs) {
             cols += c.cols();
@@ -40,13 +41,14 @@ public class Page {
         this.prev_running_sums = prev_running_sums;
         int lines = cs[0].ballots() - votes_line_start_i;
         this.num_lines_on_page = lines > cs[0].BALLOTS_PER_PAGE() ? cs[0].BALLOTS_PER_PAGE() : lines;
+        this.num_pages = num_pages;
     }
 
     private Table createPageNumberTable(float left, float bottom, float fontSize) {
-        Cell cell = new Cell();
-        cell.add(new Paragraph("" + pageID));
-        cell.setBorder(new SolidBorder(ColorConstants.BLACK, 1));
         Table table = new Table(1);
+        Cell cell = new Cell();
+        cell.add(new Paragraph(pageID + " of " + num_pages));
+        cell.setBorder(new SolidBorder(ColorConstants.BLACK, 1));
         table.addCell(cell);
         table.setPadding(0);
         table.setFixedPosition(pageID, left, bottom, cell.getWidth());

@@ -36,7 +36,8 @@ class SingleFile {
                 partial_sums.add(contests[j].buildPartialSums(votes_start_i));
             }
 
-            Page p = new Page(contests, i, votes_start_i, partial_sums, prev_running_sums);
+            Page p = new Page(contests, i, votes_start_i, partial_sums, prev_running_sums, num_pages);
+
             p.formatPDFPage(pdfdoc.getDefaultPageSize(), doc);
             updatePrevRunningSums(prev_running_sums, partial_sums);
             if (i != num_pages)
