@@ -1,6 +1,5 @@
 import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.geom.PageSize;
-import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.layout.Document;
 import com.itextpdf.layout.borders.Border;
 import com.itextpdf.layout.borders.SolidBorder;
@@ -90,28 +89,25 @@ public class Page {
         doc.add(table);
     }
 
-    private void addColumnTitlesRow(Table table) {
-        table.addHeaderCell(new Cell());
-        table.addHeaderCell(new Cell());
+    private void addContestsNames(Table table) {
+        Border border = new DoubleBorder(2);
+        Cell cell = new Cell(0, 2).add(new Paragraph("Contests"));
+        cell.setVerticalAlignment(VerticalAlignment.BOTTOM);
+        table.addHeaderCell(cell);
         for (int c = 0; c < cs.length; c++) {
-            Cell cell = new Cell(1, cs[c].cols());
-            table.addHeaderCell(cell.add(new Paragraph(cs[c].contest_name())));
+            cell = new Cell(1, cs[c].cols());
+            cell.add(new Paragraph(cs[c].contest_name()));
+            if (c != cs.length - 1) {
+                cell.setBorderRight(border);
+            }
+            table.addHeaderCell(cell);
         }
     }
 
     public void addTitlesToTable(Table table) {
-        Border border = new SolidBorder(2);
-        addColumnTitlesRow(table);
-        table.startNewRow();
+        addContestsNames(table);
         addParties(table);
         table.startNewRow();
-        Cell ballotsCell = new Cell();
-        ballotsCell.setBorderBottom(border);
-        table.addCell(ballotsCell); // skip the ballots column
-        Cell cell = new Cell().add(new Paragraph("Ballot ID")); // skip the imprintedID cell
-        cell.setBorderBottom(border);
-        cell.setTextAlignment(TextAlignment.CENTER);
-        table.addCell(cell);
         addCandidateNamesRow(table);
     }
 
@@ -119,8 +115,7 @@ public class Page {
         if (!has_parties(this.cs))
             return;
 
-        table.addCell(new Cell()); // skip the ballots column
-        table.addCell(new Cell()); // skip the imprintedID cell
+        table.addCell(new Cell(0, 2).add(new Paragraph("Party")));
         addPartiesRow(table);
     }
 
@@ -149,17 +144,33 @@ public class Page {
     private void addCandidateNamesRow(Table table) {
         Border border = new SolidBorder(2);
         DoubleBorder separation_border = new DoubleBorder(2);
+        Cell cell = candidateRowCell(border, "#");
+        table.addCell(cell);
+        table.addCell(candidateRowCell(border, "Ballot ID"));
         for (int c = 0; c < cs.length; c++) {
             for (int i = 0; i < cs[c].cols(); i++) {
-                String candidate = cs[c].candidate(i);
-                candidate = candidate.replaceAll(" ", "\n");
-                candidate = candidate.replaceAll("\n/\n", " /\n");
-                Cell cell = new Cell().add(new Paragraph(candidate));
+                String candidate = splitIntoLines(cs[c].candidate(i));
+                cell = new Cell().add(new Paragraph(candidate));
                 cell.setBorderBottom(border);
+                cell.setVerticalAlignment(VerticalAlignment.BOTTOM);
                 setBorderForNewContest(separation_border, c, i, cell);
                 table.addCell(cell);
             }
         }
+    }
+
+    private Cell candidateRowCell(Border border, String contents) {
+        Cell cell;
+        cell = new Cell().add(new Paragraph(contents));
+        cell.setBorderBottom(border);
+        cell.setTextAlignment(TextAlignment.CENTER);
+        cell.setVerticalAlignment(VerticalAlignment.BOTTOM);
+        return cell;
+    }
+
+    private static String splitIntoLines(String candidate) {
+        candidate = candidate.replaceAll(" ", "\n");
+        return candidate.replaceAll("\n/\n", " /\n");
     }
 
     private void setBorderForNewContest(Border separation_border, int c, int i, Cell cell) {
@@ -233,7 +244,7 @@ public class Page {
 
     private void addPreviousSums(Table table) {
         Border separation_border = new DoubleBorder(2);
-        Cell page_num = new Cell().add(new Paragraph(Integer.toString(pageID)));
+        Cell page_num = new Cell().add(new Paragraph(Integer.toString(pageID - 1)));
         page_num.setBorderRight(separation_border);
         table.addCell(page_num);
         Cell previous = new Cell().add(new Paragraph("Previous"));
@@ -278,13 +289,12 @@ public class Page {
         table.setVerticalAlignment(VerticalAlignment.MIDDLE);
         table.setHorizontalAlignment(HorizontalAlignment.CENTER);
         table.setAutoLayout();
-        table.setRelativePosition(0, 50, 0, 0);
+        table.setRelativePosition(0, 30, 0, 0);
         table.setTextAlignment(TextAlignment.CENTER);
         doc.add(table);
     }
 
-    public void formatPDFPage(PdfDocument pdfdoc, Document doc) {
-        PageSize ps = pdfdoc.getDefaultPageSize();
+    public void formatPDFPage(PageSize ps, Document doc) {
         addPageNumbers(doc, 14, ps);
         addTitle(doc, 14, ps);
         addVotesTable(doc, ps, 6);
