@@ -230,6 +230,10 @@ public class VotingSheets {
 
     private static String splitToKLines(String s, int k, int len) {
         s = s.replaceAll(" ", "\n").replaceAll("\n/\n", " /\n").replaceAll("\n-\n", " -\n");
+        for (int i = 0; i <= 9; i++) {
+            String ofInt = Integer.toString(i);
+            s = s.replaceAll("\n" + ofInt + "\n", " " + ofInt + "\n").replaceAll("\n" + ofInt + "$", " " + ofInt);
+        }
         String[] words = s.split("\n");
         if (words.length <= k) {
             return s;
