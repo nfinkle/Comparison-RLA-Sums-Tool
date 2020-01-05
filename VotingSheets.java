@@ -193,10 +193,10 @@ public class VotingSheets {
     }
 
     private VoteCount calcVoteCount(int votes_expected, int votes) {
-        if (votes < votes_expected) {
-            return VoteCount.UNDER_VOTE;
-        } else if (votes == votes_expected) {
+        if (votes == votes_expected) {
             return VoteCount.LEGAL_VOTE;
+        } else if (votes < votes_expected) {
+            return VoteCount.UNDER_VOTE;
         }
         return VoteCount.OVER_VOTE;
     }
@@ -210,13 +210,18 @@ public class VotingSheets {
                 if (is_new_contest[j]) {
                     int votes_expected = votes_allowed.get(prev_new_contest_i);
                     VoteCount vc = calcVoteCount(votes_expected, count);
+                    if (count >= 0 && j == prev_new_contest_i + 1) {
+                        vc = VoteCount.LEGAL_VOTE;
+                    }
                     for (int k = prev_new_contest_i; k < j; k++)
                         vote_counts[i][k] = vc;
                     count = 0;
                     prev_new_contest_i = j;
                 }
-                if (vote_matrix[i][j] == null || vote_matrix[i][j].equals(""))
+                if (vote_matrix[i][j] == null || vote_matrix[i][j].equals("")) {
+                    count = -1;
                     continue;
+                }
                 count += Integer.parseInt(vote_matrix[i][j]);
             }
             int votes_expected = votes_allowed.get(prev_new_contest_i);
@@ -384,8 +389,10 @@ public class VotingSheets {
                     }
                     width += contests[c].width() + 2;
                     c++;
+                    files++;
                 }
                 SingleFile.writePDF(Arrays.copyOfRange(contests, start, c--), s, pdfdoc);
+                files--;
                 writer.close();
                 pdfdoc.close();
             } catch (Exception e) {
