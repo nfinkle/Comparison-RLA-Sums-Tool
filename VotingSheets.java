@@ -332,7 +332,23 @@ public class VotingSheets {
     }
 
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+        if (args.length != 1) {
+            System.err.println("USAGE: java VotingSheets CVR_name");
+            return;
+        }
+        if (!args[0].contains(".csv")) {
+            System.err.println("The CVR must be of type CSV");
+            return;
+        }
+        File in;
+        Scanner scanner;
+        try {
+            in = new File(args[0]);
+            scanner = new Scanner(in);
+        } catch (Exception e) {
+            System.err.println("No file found at " + args[0]);
+            return;
+        }
         String title_line = scanner.nextLine();
         String title = title_line.split(",")[0];
         String contests_line = scanner.nextLine();

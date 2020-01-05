@@ -10,6 +10,9 @@ import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.property.HorizontalAlignment;
 import com.itextpdf.layout.property.VerticalAlignment;
 import com.itextpdf.layout.property.TextAlignment;
+import com.itextpdf.kernel.font.*;
+import com.itextpdf.io.IOException;
+import com.itextpdf.io.font.constants.*;
 
 import java.util.ArrayList;
 
@@ -229,7 +232,7 @@ public class Page {
 
     private void addRunningSums(Table table) {
         Border separation_border = new DoubleBorder(2);
-        Cell rps = new Cell().add(new Paragraph(Integer.toString(votes_line_start_i)));
+        Cell rps = new Cell().add(new Paragraph(Integer.toString(votes_line_start_i + cs[0].BALLOTS_PER_PAGE())));
         rps.setBorderRight(separation_border);
         table.addCell(rps);
         Cell running = new Cell().add(new Paragraph("Running"));
